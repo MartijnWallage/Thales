@@ -10,16 +10,38 @@ use crossterm::{
 };
 use std::io;
 
+#[derive(Clone, Copy, PartialEq)]
+enum Tile {
+    Grass,
+    Water,
+    Mountain,
+}
+
 struct AppState {
     player_x: u16,
     player_y: u16,
     width: u16,
     height: u16,
+    map: Vec<Vec<Tile>>,
 }
 
 impl AppState {
     fn new() -> Self {
-        AppState { player_x: 5, player_y: 5, width: 20, height: 20, }
+        let width = 20;
+        let height = 10;
+        let mut map = vec![vec![Tile::Grass; width as usize]; height as usize];
+
+        map[3][5] = Tile::Water;
+        map[3][6] = Tile::Water;
+        map[2][5] = Tile::Water;
+        map[2][6] = Tile::Water;
+        map[3][5] = Tile::Water;
+        map[3][6] = Tile::Water;
+        map[7][12] = Tile::Mountain;
+        map[7][11] = Tile::Mountain;
+        map[6][11] = Tile::Mountain;
+
+        AppState { player_x: 5, player_y: 5, width, height, map }
     }
 }
 
@@ -31,7 +53,13 @@ fn render(state: &AppState) -> Paragraph<'static> {
             if x == state.player_x && y == state.player_y {
                 lines.push('@');
             } else {
-                lines.push('.');
+                let tile = state.map[y as usize][x as usize];
+                let ch = match tile {
+                    Tile::Grass     => '.',
+                    Tile::Mountain  => '▲',
+                    Tile::Water     => '~',
+                };
+                lines.push(ch);
             }
         }
         lines.push('\n')
