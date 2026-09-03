@@ -30,7 +30,6 @@ struct AppState {
     width: u16,
     height: u16,
     map: Vec<Vec<Tile>>,
-    cities: Vec<City>,
 }
 
 impl AppState {
@@ -49,7 +48,7 @@ impl AppState {
         map[7][11] = Tile::Mountain;
         map[6][11] = Tile::Mountain;
 
-        AppState { player_x: 5, player_y: 5, width, height, map, cities: Vec::new() }
+        AppState { player_x: 5, player_y: 5, width, height, map }
     }
 
     fn player_move(&mut self, dx: i16, dy: i16) {
@@ -64,17 +63,11 @@ impl AppState {
     }
 
     fn found_city(&mut self) {
-        let tile = self.map[self.player_y as usize][self.player_x as usize];
-        if tile != Tile::Grass {
-            return
+        let x = self.player_x as usize;
+        let y = self.player_y as usize;
+        if self.map[y][x] == Tile::Grass {
+            self.map[y][x] = Tile::City;
         }
-
-        self.map[self.player_y as usize][self.player_x as usize] = Tile::City;
-        self.cities.push(City {
-                x: self.player_x,
-                y: self.player_y,
-                name: String::from("Rome"),
-        });
     }
 }
 
