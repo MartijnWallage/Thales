@@ -18,12 +18,6 @@ enum Tile {
     City,
 }
 
-struct City {
-    x: u16,
-    y: u16,
-    name: String,
-}
-
 struct AppState {
     player_x: u16,
     player_y: u16,
