@@ -142,15 +142,14 @@ impl AppState {
 
                 let (cities, grasses, waters) = self.neighbors(x as i32, y as i32);
 
-                if tile == Tile::Grass && cities > 0 && waters > 0 {
-                    new_map[y][x] = Tile::City;
-                } else if tile == Tile::City {
-                    if waters == 0 {
-                        new_map[y][x] = Tile::Grass;
-                    } else if cities > 5 && waters < 2 {
+                match tile {
+                    Tile::Grass if cities > 0 && waters > 0 && grasses > 0 => new_map[y][x] = Tile::City,
+                    Tile::City if waters < 0 => new_map[y][x] = Tile::Grass,
+                    Tile::City if cities > 4 && grasses > 1 => {
                         new_map[y][x] = Tile::Grass;
                         self.spawn_settler(x as u16, y as u16);
-                    }
+                    },
+                    _ => {},
                 }
             }
         }
