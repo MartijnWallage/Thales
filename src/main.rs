@@ -44,9 +44,17 @@ impl AppState {
         map[2][6] = Tile::Water;
         map[3][5] = Tile::Water;
         map[3][6] = Tile::Water;
+        map[4][7] = Tile::Water;
+        map[5][8] = Tile::Water;
+        map[6][9] = Tile::Water;
+        map[7][9] = Tile::Water;
+        map[8][9] = Tile::Water;
+        map[8][10] = Tile::Water;
+        map[9][11] = Tile::Water;
         map[7][12] = Tile::Mountain;
-        map[7][11] = Tile::Mountain;
+        map[7][10] = Tile::Mountain;
         map[6][11] = Tile::Mountain;
+        map[8][11] = Tile::Mountain;
 
         AppState { player_x: 5, player_y: 5, width, height, map }
     }
@@ -68,6 +76,50 @@ impl AppState {
         if self.map[y][x] == Tile::Grass {
             self.map[y][x] = Tile::City;
         }
+    }
+
+    fn urban_growth(&self, x: i32, y: i32) -> u8 {
+        let mut is_water: bool = false;
+        let mut is_city: bool = false;
+        let mut is_grass: bool = false;
+
+        for i in y-1..=y+1 {
+            for j in x-1..=x+1 {
+                if i < 0 || i >= self.height as i32 ||
+                    j < 0 || j >= self.width as i32 ||
+                        (i == y && j == x) {
+                    continue;
+                }
+
+                match self.map[i as usize][j as usize] {
+                    Tile::City      => is_city = true,
+                    Tile::Grass     => is_grass = true,
+                    Tile::Water     => is_water = true,
+                    Tile::Mountain  => {},
+                }
+            }
+        }
+        
+        is_city as u8 + is_grass as u8 + is_water as u8
+    }
+
+    fn step_cities(&mut self) {
+        let mut new_map = self.map.clone();
+
+        for i in 0..self.height as usize {
+            for j in 0..self.width as usize {
+                let tile = self.map[i][j];
+                let score = self.urban_growth(j as i32, i as i32);
+
+                new_map[i][j] = match tile {
+                    Tile::Grass if score > 2    => Tile::City,
+                    Tile::City if score < 2     => Tile::Grass,
+                    other                       => other,
+                }
+            }
+        }
+
+        self.map = new_map;
     }
 }
 
@@ -118,6 +170,7 @@ fn main() -> io::Result<()> {
                 KeyCode::Down       => state.player_move(0, 1),
                 KeyCode::Left       => state.player_move(-1, 0),
                 KeyCode::Right      => state.player_move(1, 0),
+                KeyCode::Char('n')  => state.step_cities(),
                 _                   => {}
             }
         }
