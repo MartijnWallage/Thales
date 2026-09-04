@@ -52,7 +52,7 @@ struct Unit {
 struct Map {
     width: u16,
     height: u16,
-    tiles: Vec<Vec<Tile>>,
+    tiles: Vec<Tile>,
 }
 
 impl Map {
@@ -64,15 +64,9 @@ impl Map {
 
         let mut tiles = Vec::new();
 
-        for _ in 0..height {
-            let mut row = Vec::new();
-
-            for _ in 0..width {
-                row.push(Self::random_tile(&mut rng, &dist));
+        for _ in 0..(width * height) {
+            tiles.push(Self::random_tile(&mut rng, &dist));
             }
-
-            tiles.push(row);
-        }
 
         Self {
             width,
@@ -93,6 +87,10 @@ impl Map {
             }
     }
 
+    fn index(&self, x: u16, y: u16) -> usize {
+        y as usize * self.width as usize + x as usize
+    }
+
     fn in_bounds(&self, x: i32, y: i32) -> bool {
         x >= 0
             && x < self.width as i32
@@ -101,11 +99,13 @@ impl Map {
     }
 
     fn get(&self, x: u16, y: u16) -> Tile {
-        self.tiles[y as usize][x as usize]
+        let index = self.index(x, y);
+        self.tiles[index]
     }
 
     fn set(&mut self, x: u16, y: u16, tile: Tile) {
-        self.tiles[y as usize][x as usize] = tile;
+        let index = self.index(x, y);
+        self.tiles[index] = tile;
     }
 
     fn neighbors(&self, x: i32, y: i32) -> (u8, u8, u8) {
@@ -121,7 +121,9 @@ impl Map {
                     continue;
                 }
 
-                match self.tiles[i as usize][j as usize] {
+                let index = self.index(j as u16, i as u16);
+
+                match self.tiles[index] {
                     Tile::City      => city_count += 1,
                     Tile::Grass     => grass_count += 1,
                     Tile::Water     => water_count += 1,
@@ -139,7 +141,8 @@ impl Map {
 
         for y in 0..self.height {
             for x in 0..self.width {
-                let tile = self.tiles[y as usize][x as usize];
+                let index = self.index(x, y);
+                let tile = self.tiles[index];
 
                 let (cities, grasses, waters) =
                     self.neighbors(x as i32, y as i32);
@@ -150,12 +153,12 @@ impl Map {
                             && waters > 0
                             && grasses > 0 =>
                     {
-                        new_tiles[y as usize][x as usize] = Tile::City;
+                        new_tiles[index] = Tile::City;
                     }
                     Tile::City
                         if grasses > 3 && cities > waters =>
                     {
-                        new_tiles[y as usize][x as usize] = Tile::Grass;
+                        new_tiles[index] = Tile::Grass;
                         settlers_to_spawn.push((x, y));
                     },
 
