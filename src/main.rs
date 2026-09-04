@@ -1,25 +1,24 @@
-use ratatui::{
-    backend::CrosstermBackend,
-    widgets::Paragraph,
-    Terminal,
-};
+use std::io;
+
 use crossterm::{
     event::{self, Event, KeyCode},
     terminal::{enable_raw_mode, disable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     execute,
 };
-use std::io;
+
 use rand::Rng;
 use rand::distributions::{Distribution, WeightedIndex};
 
-fn random_tile(rng: &mut impl Rng, dist: &WeightedIndex<u32>) -> Tile {
-    match dist.sample(rng) {
-        0 => Tile::Grass,
-        1 => Tile::Water,
-        2 => Tile::Mountain,
-        _ => unreachable!(),
-    }
-}
+use ratatui::{
+    backend::CrosstermBackend,
+    widgets::Paragraph,
+    Terminal,
+};
+
+
+// -----------------------------------------------
+// Tile
+// -----------------------------------------------
 
 #[derive(Clone, Copy, PartialEq)]
 enum Tile {
@@ -28,6 +27,11 @@ enum Tile {
     Mountain,
     City,
 }
+
+
+// -------------------------------------------------------------------------
+// Unit
+// -------------------------------------------------------------------------
 
 #[derive(Clone, Copy, PartialEq)]
 enum UnitKind {
@@ -40,71 +44,68 @@ struct Unit {
     y: u16,
 }
 
-struct AppState {
-    units: Vec<Unit>,
-    selected: Option<usize>,
+
+//--------------------------------------------------------------------------
+// Map
+// -------------------------------------------------------------------------
+
+struct Map {
     width: u16,
     height: u16,
-    map: Vec<Vec<Tile>>,
+    tiles: Vec<Vec<Tile>>,
 }
 
-impl AppState {
-    fn new() -> Self {
-        let width = 50;
-        let height = 25;
+impl Map {
+    fn new(width: u16, height: u16) -> Self {
         let mut rng = rand::thread_rng();
+
         let weights = [50, 10, 15];
         let dist = WeightedIndex::new(weights).unwrap();
 
-        let mut map = Vec::new();
+        let mut tiles = Vec::new();
+
         for _ in 0..height {
             let mut row = Vec::new();
+
             for _ in 0..width {
-                row.push(random_tile(&mut rng, &dist));
+                row.push(Self::random_tile(&mut rng, &dist));
             }
-            map.push(row);
+
+            tiles.push(row);
         }
 
-        AppState {
-            units: vec![ Unit { kind: UnitKind::Settler, x: 5, y: 5}],
-            selected: Some(0),
+        Self {
             width,
             height,
-            map,
+            tiles
         }
     }
 
-    fn move_selected(&mut self, dx: i16, dy: i16) {
-        let Some(index) = self.selected else { return };
-        let unit = &mut self.units[index];
-
-        let new_x = unit.x as i32 + dx as i32;
-        let new_y = unit.y as i32 + dy as i32;
-        if new_x >= 0 && new_x < self.width as i32 && new_y >= 0 && new_y < self.height as i32 {
-            if self.map[new_y as usize][new_x as usize] != Tile::Water {
-               unit.x = new_x as u16;
-               unit.y = new_y as u16;
+    fn random_tile(
+        rng: &mut impl Rng,
+        dist: &WeightedIndex<u32>
+        ) -> Tile {
+            match dist.sample(rng) {
+                0 => Tile::Grass,
+                1 => Tile::Water,
+                2 => Tile::Mountain,
+                _ => unreachable!(),
             }
-        } 
     }
 
-    fn found_city(&mut self) {
-        let Some(index) = self.selected else { return };
-        let unit = &mut self.units[index];
-        if unit.kind != UnitKind::Settler { return };
-
-        let (x, y) = (unit.x as usize, unit.y as usize);
-        if self.map[y][x] == Tile::Grass {
-            self.map[y][x] = Tile::City;
-            self.units.remove(index);
-            self.selected = self.units.len().checked_sub(1);
-        }
+    fn in_bounds(&self, x: i32, y: i32) -> bool {
+        x >= 0
+            && x < self.width as i32
+            && y >= 0
+            && y < self.height as i32
     }
 
-    fn spawn_settler(&mut self, x: u16, y: u16) {
-        let settler = Unit {kind: UnitKind::Settler, x, y};
-        self.units.push(settler);
-        self.selected = Some(self.units.len() - 1);
+    fn get(&self, x: u16, y: u16) -> Tile {
+        self.tiles[y as usize][x as usize]
+    }
+
+    fn set(&mut self, x: u16, y: u16, tile: Tile) {
+        self.tiles[y as usize][x as usize] = tile;
     }
 
     fn neighbors(&self, x: i32, y: i32) -> (u8, u8, u8) {
@@ -120,7 +121,7 @@ impl AppState {
                     continue;
                 }
 
-                match self.map[i as usize][j as usize] {
+                match self.tiles[i as usize][j as usize] {
                     Tile::City      => city_count += 1,
                     Tile::Grass     => grass_count += 1,
                     Tile::Water     => water_count += 1,
@@ -128,47 +129,164 @@ impl AppState {
                 }
             }
         }
+
         (city_count, grass_count, water_count)
     }
 
-    fn step_cities(&mut self) {
-        let mut new_map = self.map.clone();
+    fn step(&mut self) -> Vec<(u16, u16)> {
+        let mut new_tiles = self.tiles.clone();
+        let mut settlers_to_spawn = Vec::new();
 
-        for i in 0..self.height {
-            for j in 0..self.width {
-                let x = j as usize;
-                let y = i as usize;
-                let tile = self.map[y][x];
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let tile = self.tiles[y as usize][x as usize];
 
-                let (cities, grasses, waters) = self.neighbors(x as i32, y as i32);
+                let (cities, grasses, waters) =
+                    self.neighbors(x as i32, y as i32);
 
                 match tile {
-                    Tile::Grass if cities > 0 && waters > 0 && grasses > 0 => new_map[y][x] = Tile::City,
-                    Tile::City if waters < 0 => new_map[y][x] = Tile::Grass,
-                    Tile::City if cities > 4 && grasses > 1 => {
-                        new_map[y][x] = Tile::Grass;
-                        self.spawn_settler(x as u16, y as u16);
+                    Tile::Grass
+                        if cities > 0
+                            && waters > 0
+                            && grasses > 0 =>
+                    {
+                        new_tiles[y as usize][x as usize] = Tile::City;
+                    }
+                    Tile::City
+                        if grasses > 3 && cities > waters =>
+                    {
+                        new_tiles[y as usize][x as usize] = Tile::Grass;
+                        settlers_to_spawn.push((x, y));
                     },
+
                     _ => {},
                 }
             }
         }
 
-        self.map = new_map;
+        self.tiles = new_tiles;
+
+        settlers_to_spawn
     }
 }
 
-fn render(state: &AppState) -> Paragraph<'static> {
+
+// -------------------------------------------------------------------------------
+// Game
+// -------------------------------------------------------------------------------
+
+struct Game {
+    map: Map,
+    units: Vec<Unit>,
+    selected: Option<usize>,
+}
+
+impl Game {
+    fn new() -> Self {
+        let map = Map::new(50, 25);
+        
+        Self {
+            map: map,
+            units: vec![
+                Unit {
+                    kind: UnitKind::Settler,
+                    x: 5,
+                    y: 5
+                }
+            ],
+            selected: Some(0),
+        }
+    }
+
+    fn move_selected(&mut self, dx: i16, dy: i16) {
+        let Some(index) = self.selected else {
+            return 
+        };
+
+        let unit = &mut self.units[index];
+
+        let new_x = unit.x as i32 + dx as i32;
+        let new_y = unit.y as i32 + dy as i32;
+
+        if !self.map.in_bounds(new_x, new_y) {
+            return
+        };
+
+        let new_x = new_x as u16;
+        let new_y = new_y as u16;
+
+        if self.map.get(new_x, new_y) == Tile::Water {
+            return
+        };
+
+        unit.x = new_x;
+        unit.y = new_y;
+    }
+
+    fn found_city(&mut self) {
+        let Some(index) = self.selected else {
+            return
+        };
+
+        if self.units[index].kind != UnitKind::Settler {
+            return
+        };
+
+        let x = self.units[index].x;
+        let y = self.units[index].y;
+
+        if self.map.get(x, y) != Tile::Grass {
+            return
+        };
+        
+        self.map.set(x, y, Tile::City);
+
+        self.units.remove(index);
+
+        self.selected = self.units
+            .len()
+            .checked_sub(1);
+    }
+
+    fn spawn_settler(&mut self, x: u16, y: u16) {
+        self.units.push(Unit {
+            kind: UnitKind::Settler,
+            x,
+            y
+        });
+
+        self.selected = Some(self.units.len() - 1);
+    }
+
+    fn step(&mut self) {
+        let spawn_locations = self.map.step();
+
+        for (x, y) in spawn_locations {
+            self.spawn_settler(x, y);
+        }
+    }
+}
+
+
+// ----------------------------------------------------------------------------------
+// Render
+// ----------------------------------------------------------------------------------
+
+fn render(game: &Game) -> Paragraph<'static> {
     let mut lines = String::new();
 
-    for i in 0..state.height {
-        for j in 0..state.width {
-            if let Some(unit) = state.units.iter().find(|u| u.x == j && u.y == i) {
-                lines.push(match unit.kind {
+    for y in 0..game.map.height {
+        for x in 0..game.map.width {
+            if let Some(unit) = game.units.iter().find(
+                |unit| { unit.x == x && unit.y == y }
+                ) {
+                let ch = match unit.kind {
                     UnitKind::Settler => '@'
-                });
+                };
+                lines.push(ch);
             } else {
-                let tile = state.map[i as usize][j as usize];
+                let tile = game.map.get(x, y);
+
                 let ch = match tile {
                     Tile::Grass     => '.',
                     Tile::Mountain  => '▲',
@@ -178,24 +296,36 @@ fn render(state: &AppState) -> Paragraph<'static> {
                 lines.push(ch);
             }
         }
+
         lines.push('\n');
     }
 
     Paragraph::new(lines)
 }
 
+
+// ------------------------------------------------------------------------------------------
+// Main
+// ------------------------------------------------------------------------------------------
+
 fn main() -> io::Result<()> {
     enable_raw_mode()?;
+
     let mut std_out = io::stdout();
-    execute!(std_out, EnterAlternateScreen)?;
+    
+    execute!(
+        std_out,
+        EnterAlternateScreen
+        )?;
+    
     let backend = CrosstermBackend::new(std_out);
     let mut terminal = Terminal::new(backend)?;
     
-    let mut state = AppState::new();
+    let mut game = Game::new();
 
     loop {
         terminal.draw(|frame| {
-            let paragraph = render(&state);
+            let paragraph = render(&game);
             frame.render_widget(paragraph, frame.area());
         })?;
 
@@ -203,23 +333,31 @@ fn main() -> io::Result<()> {
             match key.code {
                 KeyCode::Char('q')  => break,
                 KeyCode::Tab        => {
-                    if !state.units.is_empty() {
-                        let next = state.selected.map_or(0, |i| (i + 1) % state.units.len() );
-                        state.selected = Some(next);
+                    if game.units.is_empty() {
+                        continue
                     }
-                }
-                KeyCode::Char('b')  => state.found_city(),
-                KeyCode::Up         => state.move_selected(0, -1),
-                KeyCode::Down       => state.move_selected(0, 1),
-                KeyCode::Left       => state.move_selected(-1, 0),
-                KeyCode::Right      => state.move_selected(1, 0),
-                KeyCode::Char('n')  => state.step_cities(),
+                    let next = game
+                        .selected
+                        .map_or(0, |i| (i + 1) % game.units.len());
+                    
+                    game.selected = Some(next);
+                },
+                KeyCode::Char('b')  => game.found_city(),
+                KeyCode::Up         => game.move_selected(0, -1),
+                KeyCode::Down       => game.move_selected(0, 1),
+                KeyCode::Left       => game.move_selected(-1, 0),
+                KeyCode::Right      => game.move_selected(1, 0),
+                KeyCode::Char('n')  => game.step(),
                 _                   => {}
             }
         }
     }
 
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen
+        )?;
     Ok(())
 }
