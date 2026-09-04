@@ -53,7 +53,7 @@ impl AppState {
         let width = 50;
         let height = 25;
         let mut rng = rand::thread_rng();
-        let weights = [70, 10, 15];
+        let weights = [50, 10, 15];
         let dist = WeightedIndex::new(weights).unwrap();
 
         let mut map = Vec::new();
@@ -107,11 +107,11 @@ impl AppState {
         self.selected = Some(self.units.len() - 1);
     }
 
-    fn urban_growth(&self, x: i32, y: i32) -> u8 {
-        let mut is_water: bool = false;
-        let mut is_city: bool = false;
-        let mut is_grass: bool = false;
-
+    fn neighbors(&self, x: i32, y: i32) -> (u8, u8, u8) {
+        let mut water_count: u8 = 0;
+        let mut city_count: u8 = 0;
+        let mut grass_count: u8 = 0;
+       
         for i in y-1..=y+1 {
             for j in x-1..=x+1 {
                 if i < 0 || i >= self.height as i32 ||
@@ -121,15 +121,14 @@ impl AppState {
                 }
 
                 match self.map[i as usize][j as usize] {
-                    Tile::City      => is_city = true,
-                    Tile::Grass     => is_grass = true,
-                    Tile::Water     => is_water = true,
+                    Tile::City      => city_count += 1,
+                    Tile::Grass     => grass_count += 1,
+                    Tile::Water     => water_count += 1,
                     Tile::Mountain  => {},
                 }
             }
         }
-        
-        is_city as u8 + is_grass as u8 + is_water as u8
+        (city_count, grass_count, water_count)
     }
 
     fn step_cities(&mut self) {
@@ -140,15 +139,18 @@ impl AppState {
                 let x = j as usize;
                 let y = i as usize;
                 let tile = self.map[y][x];
-                let score = self.urban_growth(x as i32, y as i32);
 
-                match tile {
-                    Tile::Grass if score > 2    => new_map[y][x] = Tile::City,
-                    Tile::City if score < 2     => {
+                let (cities, grasses, waters) = self.neighbors(x as i32, y as i32);
+
+                if tile == Tile::Grass && cities > 0 && waters > 0 {
+                    new_map[y][x] = Tile::City;
+                } else if tile == Tile::City {
+                    if waters == 0 {
+                        new_map[y][x] = Tile::Grass;
+                    } else if cities > 5 && waters < 2 {
                         new_map[y][x] = Tile::Grass;
                         self.spawn_settler(x as u16, y as u16);
-                    },
-                    _                           => {},
+                    }
                 }
             }
         }
