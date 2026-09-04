@@ -9,6 +9,17 @@ use crossterm::{
     execute,
 };
 use std::io;
+use rand::Rng;
+use rand::distributions::{Distribution, WeightedIndex};
+
+fn random_tile(rng: &mut impl Rng, dist: &WeightedIndex<u32>) -> Tile {
+    match dist.sample(rng) {
+        0 => Tile::Grass,
+        1 => Tile::Water,
+        2 => Tile::Mountain,
+        _ => unreachable!(),
+    }
+}
 
 #[derive(Clone, Copy, PartialEq)]
 enum Tile {
@@ -39,27 +50,20 @@ struct AppState {
 
 impl AppState {
     fn new() -> Self {
-        let width = 30;
-        let height = 15;
-        let mut map = vec![vec![Tile::Grass; width as usize]; height as usize];
+        let width = 50;
+        let height = 25;
+        let mut rng = rand::thread_rng();
+        let weights = [70, 10, 15];
+        let dist = WeightedIndex::new(weights).unwrap();
 
-        map[3][5] = Tile::Water;
-        map[3][6] = Tile::Water;
-        map[2][5] = Tile::Water;
-        map[2][6] = Tile::Water;
-        map[3][5] = Tile::Water;
-        map[3][6] = Tile::Water;
-        map[4][7] = Tile::Water;
-        map[5][8] = Tile::Water;
-        map[6][9] = Tile::Water;
-        map[7][9] = Tile::Water;
-        map[8][9] = Tile::Water;
-        map[8][10] = Tile::Water;
-        map[9][11] = Tile::Water;
-        map[7][12] = Tile::Mountain;
-        map[7][10] = Tile::Mountain;
-        map[6][11] = Tile::Mountain;
-        map[8][11] = Tile::Mountain;
+        let mut map = Vec::new();
+        for _ in 0..height {
+            let mut row = Vec::new();
+            for _ in 0..width {
+                row.push(random_tile(&mut rng, &dist));
+            }
+            map.push(row);
+        }
 
         AppState {
             units: vec![ Unit { kind: UnitKind::Settler, x: 5, y: 5}],
