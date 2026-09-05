@@ -57,22 +57,84 @@ struct Map {
 
 impl Map {
     fn new(width: u16, height: u16) -> Self {
-        let mut rng = rand::thread_rng();
+        let height_map = Self::generate_height_map(width, height);
 
-        let weights = [50, 10, 15];
-        let dist = WeightedIndex::new(weights).unwrap();
-
-        let mut tiles = Vec::new();
-
-        for _ in 0..(width * height) {
-            tiles.push(Self::random_tile(&mut rng, &dist));
-            }
+        let tiles = height_map
+            .into_iter()
+            .map(|h| {
+                if h < 45 {
+                    Tile::Water
+                } else if h > 55 {
+                    Tile::Mountain
+                } else {
+                    Tile::Grass
+                }
+            })
+            .collect();
 
         Self {
             width,
             height,
             tiles
         }
+    }
+
+    fn generate_height_map(width: u16, height: u16) -> Vec<u8> {
+        let size = width as usize * height as usize;
+
+        let mut rng = rand::thread_rng();
+
+        let mut height_map: Vec<u8> =
+            (0..size)
+            .map(|_| rng.gen_range(0..=100))
+            .collect();
+
+        for _ in 0..3 {
+            height_map = Self::smooth_height_map(&height_map, width, height);
+        }
+
+        height_map
+    }
+
+    fn smooth_height_map(height_map: &[u8], width: u16, height: u16) -> Vec<u8> {
+        let mut result = vec![0; height_map.len()];
+
+        for y in 0..height {
+            for x in 0..width {
+                let mut total = 0u32;
+                let mut count = 0u32;
+
+                for dy in -1i32..=1 {
+                    for dx in -1i32..=1 {
+                        let nx = x as i32 + dx;
+                        let ny = y as i32 + dy;
+
+                        if nx < 0
+                            || nx >= width as i32
+                            || ny < 0
+                            || ny >= height as i32
+                            {
+                                continue;
+                            }
+
+                        let index =
+                            ny as usize * width as usize
+                                + nx as usize;
+
+                        total += height_map[index] as u32;
+                        count += 1;
+                    }
+                }
+
+            let index =
+                y as usize * width as usize
+                    + x as usize;
+
+            result[index] = (total / count) as u8;
+            }
+        }
+
+        result
     }
 
     fn random_tile(
@@ -155,8 +217,11 @@ impl Map {
                     {
                         new_tiles[index] = Tile::City;
                     }
+                    Tile::City if waters < 1 => {
+                        new_tiles[index] = Tile::Grass;
+                    }
                     Tile::City
-                        if grasses > 3 && cities > waters =>
+                        if cities > grasses && cities > waters =>
                     {
                         new_tiles[index] = Tile::Grass;
                         settlers_to_spawn.push((x, y));
