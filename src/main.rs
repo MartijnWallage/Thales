@@ -7,7 +7,6 @@ use crossterm::{
 };
 
 use rand::Rng;
-use rand::distributions::{Distribution, WeightedIndex};
 
 use ratatui::{
     backend::CrosstermBackend,
@@ -137,18 +136,6 @@ impl Map {
         result
     }
 
-    fn random_tile(
-        rng: &mut impl Rng,
-        dist: &WeightedIndex<u32>
-        ) -> Tile {
-            match dist.sample(rng) {
-                0 => Tile::Grass,
-                1 => Tile::Water,
-                2 => Tile::Mountain,
-                _ => unreachable!(),
-            }
-    }
-
     fn index(&self, x: u16, y: u16) -> usize {
         y as usize * self.width as usize + x as usize
     }
@@ -251,7 +238,7 @@ struct Game {
 
 impl Game {
     fn new() -> Self {
-        let map = Map::new(50, 25);
+        let map = Map::new(100, 25);
         
         Self {
             map: map,
