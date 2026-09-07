@@ -204,7 +204,7 @@ impl Map {
                     {
                         new_tiles[index] = Tile::City;
                     }
-                    Tile::City if waters < 1 => {
+                    Tile::City if waters == 0 || grasses == 0 || cities == 0 => {
                         new_tiles[index] = Tile::Grass;
                     }
                     Tile::City
@@ -213,7 +213,6 @@ impl Map {
                         new_tiles[index] = Tile::Grass;
                         settlers_to_spawn.push((x, y));
                     },
-
                     _ => {},
                 }
             }
