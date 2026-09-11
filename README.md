@@ -1,2 +1,2 @@
-# SlowCiv
-Slower, funner, less addictive version of Civ II.
+# Thales
+Modelling the world (urban growth, immigration, economy, wars, climate change, natural disasters) using cellular automata.
